@@ -1,0 +1,118 @@
+#################################################################
+#####   Master Dissertation: Numerical Simulation      ##########
+#               Student: Félix Dopchie                          #
+#           Supervisor: François Maniquet                       #
+#################################################################
+
+# Packages setting
+if(!require(nleqslv)) install.packages("nleqslv")
+library(nleqslv)
+
+# Calibration parameters 
+b     <- 15      # Unemployment benefit
+alpha <- 0.5     # Matching function elasticity
+y     <- 25      # Productivity
+psi   <- 0.5     # Vacancy posting cost
+d     <- 1       # Application cost
+c     <- 5       # Disutility parameter for immigrants
+mu    <- 0.25    # Matching efficiency
+xi    <- 0.9     # Share of Disutility firms 
+
+# Definitions:
+# p_j(theta) = mu * theta^(1 - alpha)
+# p'_j(theta) = mu*(1 - alpha)*theta^(-alpha)
+# For natives (j = N): w_N(theta) = y - (k/mu)*theta^alpha
+# For immigrants (j = M): w_M(theta) = y - (k/mu)*theta^alpha - xi c
+
+# -----------------------------
+# Market Equilibrium (Laissez-Faire) - thetas include the FOCs directly
+# -----------------------------
+# For natives:
+theta_N_market <- ((mu * (1 - alpha) * (y - b)) / psi)^(1/alpha)
+# For immigrants:
+theta_M_market <- ((mu * (1 - alpha) * (y - b - c)) / psi)^(1/alpha)
+
+p_N_market <- mu * theta_N_market^(1 - alpha)
+p_M_market <- mu * theta_M_market^(1 - alpha)
+
+w_N_market <- y - (psi/mu) * theta_N_market^alpha          # native wage
+w_M_market <- y - (psi/mu) * theta_M_market^alpha - xi * c      # immigrant wage
+
+U_N_market <- p_N_market * w_N_market + (1 - p_N_market) * b - d
+U_M_market <- p_M_market * w_M_market + (1 - p_M_market) * b - d
+
+cat("=== Market Equilibrium (Laissez-Faire) ===\n")
+cat(sprintf("Native:    theta = %.3f, p = %.3f, wage = %.3f, utility = %.3f\n",
+            theta_N_market, p_N_market, w_N_market, U_N_market))
+cat(sprintf("Immigrant: theta = %.3f, p = %.3f, wage = %.3f, utility = %.3f\n\n",
+            theta_M_market, p_M_market, w_M_market, U_M_market))
+
+# -----------------------------
+# Equal Pay Policy Equilibrium
+# -----------------------------
+# Under Equal Pay, a common wage w applies for all workers.
+# We assume v_j = A_j * theta_j with A_j = 1 (for simplicity),
+# and the common wage is given by:
+# w = y - (theta_M^(1-alpha)/(theta_N^(1-alpha)+theta_M^(1-alpha)))*c - ((theta_N+theta_M)/(mu*(theta_N^(1-alpha)+theta_M^(1-alpha))))*k
+
+w_equal <- function(theta_N, theta_M) {
+  denom <- theta_N^(1 - alpha) + theta_M^(1 - alpha)
+  w <- y - (theta_M^(1 - alpha) / denom) * xi * c - ((theta_N + theta_M) / (mu * denom)) * psi
+  return(w)
+}
+
+# For Equal Pay, the worker's utility is:
+# For natives: U_N = p_N(theta_N)*(w) + (1-p_N(theta_N))*b - d
+# For immigrants: U_M = p_M(theta_M)*(w - c) + (1-p_M(theta_M))*b - d
+# The corresponding FOC for optimization are:
+# Native:    p'_N(theta_N) * (w - b) + p_N(theta_N) * (dw/dtheta_N) = 0
+# Immigrant: p'_M(theta_M) * ((w-c) - b) + p_M(theta_M) * (dw/dtheta_M) = 0
+
+# Numerical derivative function
+num_deriv <- function(f, x, h = 1e-6) {
+  (f(x + h) - f(x - h))/(2*h)
+}
+
+FOCs <- function(theta) {
+  theta_N <- theta[1]
+  theta_M <- theta[2]
+  w <- w_equal(theta_N, theta_M)
+  
+  # For natives:
+  p_N  <- mu * theta_N^(1 - alpha)
+  dp_N <- mu * (1 - alpha) * theta_N^(-alpha)
+  
+  # For immigrants:
+  p_M  <- mu * theta_M^(1 - alpha)
+  dp_M <- mu * (1 - alpha) * theta_M^(-alpha)
+  
+  # Numerical derivatives of w with respect to theta_N and theta_M
+  dw_dthetaN <- num_deriv(function(t) w_equal(t, theta_M), theta_N)
+  dw_dthetaM <- num_deriv(function(t) w_equal(theta_N, t), theta_M)
+  
+  # FOCs: note the surplus for immigrants is (w - c - b)
+  F_N <- dp_N * (w - b) + p_N * dw_dthetaN
+  F_M <- dp_M * ((w - xi * c) - b) + p_M * dw_dthetaM
+  
+  return(c(F_N, F_M))
+}
+
+# Use market equilibrium values as initial guess for the solver
+initial_guess <- c(theta_N_market, theta_M_market)
+solution <- nleqslv(initial_guess, FOCs)
+
+theta_N_equal <- solution$x[1]
+theta_M_equal <- solution$x[2]
+
+w_equal_val <- w_equal(theta_N_equal, theta_M_equal)
+p_N_equal <- mu * theta_N_equal^(1 - alpha)
+p_M_equal <- mu * theta_M_equal^(1 - alpha)
+U_N_equal <- p_N_equal * w_equal_val + (1 - p_N_equal) * b - d
+U_M_equal <- p_M_equal * w_equal_val + (1 - p_M_equal) * b - d
+
+cat("=== Equal Pay Policy Equilibrium ===\n")
+cat(sprintf("Common wage: %.3f\n", w_equal_val))
+cat(sprintf("Native:    theta = %.3f, p = %.3f, utility = %.3f\n",
+            theta_N_equal, p_N_equal, U_N_equal))
+cat(sprintf("Immigrant: theta = %.3f, p = %.3f, utility = %.3f\n",
+            theta_M_equal, p_M_equal, U_M_equal))
