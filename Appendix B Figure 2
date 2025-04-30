@@ -1,0 +1,116 @@
+#################################################################
+#####   Master Dissertation: Numerical Simulation      ##########
+#####    Num. Simulation: Figure 2 in Appendix B          #######     
+#               Student: Félix Dopchie                          #
+#           Supervisor: François Maniquet                       #
+#################################################################
+
+# Install and load solver package
+if (!require(nleqslv)) install.packages("nleqslv", quiet = TRUE)
+library(nleqslv)
+
+# -----------------------------
+# Calibration parameters 
+# -----------------------------
+b     <- 15      # Unemployment benefit
+alpha <- 0.5     # Matching-function elasticity
+y     <- 25      # Productivity
+psi   <- 0.5     # Vacancy posting cost
+d     <- 1       # Application cost
+c     <- 5       # Immigrant disutility parameter (fixed)
+mu    <- 0.25    # Matching efficiency
+
+# -----------------------------
+# Market tightness (laissez-faire)
+# -----------------------------
+theta_N_market <- ((mu * (1 - alpha) * (y - b)) / psi)^(1/alpha)
+theta_M_market <- function(c_val) {
+  numer <- y - b - c_val
+  if (numer <= 0) return(0)   # no matches if disutility too high
+  ((mu * (1 - alpha) * numer) / psi)^(1/alpha)
+}
+
+# -----------------------------
+# Immigrant utility under laissez-faire
+# -----------------------------
+U_M_market_xi <- function(xi_val) {
+  thM <- theta_M_market(c)
+  pM  <- mu * thM^(1 - alpha)
+  wM  <- y - (psi / mu) * thM^alpha - xi_val * c
+  pM * wM + (1 - pM) * b - d
+}
+
+# -----------------------------
+# Equal-Pay policy definitions
+# -----------------------------
+# Common wage under Equal-Pay
+w_equal <- function(thN, thM, xi_val) {
+  denom <- thN^(1 - alpha) + thM^(1 - alpha)
+  y - (thM^(1 - alpha) / denom) * xi_val * c -
+    ((thN + thM) / (mu * denom)) * psi
+}
+
+# First-order conditions for Equal-Pay equilibrium
+FOCs_eq <- function(theta, xi_val) {
+  thN <- theta[1]
+  thM <- theta[2]
+  w   <- w_equal(thN, thM, xi_val)
+  
+  pN  <- mu * thN^(1 - alpha); dpN <- mu * (1 - alpha) * thN^(-alpha)
+  pM  <- mu * thM^(1 - alpha); dpM <- mu * (1 - alpha) * thM^(-alpha)
+  
+  h   <- 1e-6
+  dwN <- (w_equal(thN + h, thM, xi_val) - w_equal(thN - h, thM, xi_val)) / (2*h)
+  dwM <- (w_equal(thN, thM + h, xi_val) - w_equal(thN, thM - h, xi_val)) / (2*h)
+  
+  F1  <- dpN * (w - b)              + pN * dwN
+  F2  <- dpM * ((w - xi_val * c) - b) + pM * dwM
+  c(F1, F2)
+}
+
+# Immigrant utility under Equal-Pay
+U_M_equal_xi <- function(xi_val) {
+  # if no matches possible, utility is unemployment benefit minus application cost
+  if (y - b - c <= 0) return(b - d)
+  
+  init <- c(theta_N_market, theta_M_market(c))
+  sol  <- try(nleqslv(init, function(th) FOCs_eq(th, xi_val)), silent = TRUE)
+  if (inherits(sol, "try-error") || sol$termcd != 1 || any(!is.finite(sol$x))) {
+    return(NA)
+  }
+  
+  thN <- sol$x[1]
+  thM <- sol$x[2]
+  pM  <- mu * thM^(1 - alpha)
+  w   <- w_equal(thN, thM, xi_val)
+  pM * w + (1 - pM) * b - d
+}
+
+# -----------------------------
+# Sweep xi from 0 to 1 in steps of 0.1
+# -----------------------------
+xi_vals   <- seq(0, 1, by = 0.1)
+U_mkt_vec <- numeric(length(xi_vals))
+U_eq_vec  <- numeric(length(xi_vals))
+
+for (i in seq_along(xi_vals)) {
+  xi <- xi_vals[i]
+  U_mkt_vec[i] <- U_M_market_xi(xi)
+  U_eq_vec[i]  <- U_M_equal_xi(xi)
+}
+
+# -----------------------------
+# Plot results (Appendix B: Figure 2)
+# -----------------------------
+plot(xi_vals, U_mkt_vec,
+     type = "b", pch = 16, lty = 1, col = "blue",
+     xlab = "Share of disutility firms",
+     ylab = expression(U[M]),
+     main = "Immigrant utility : Laisser-faire vs Equal-Pay ")
+lines(xi_vals, U_eq_vec,
+      type = "b", pch = 17, lty = 2, col = "red")
+legend("topright",
+       legend = c("Laissez-faire", "Equal-Pay"),
+       col    = c("blue", "red"),
+       pch    = c(16, 17),
+       lty    = c(1, 2))
