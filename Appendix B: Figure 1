@@ -109,3 +109,4 @@ legend("topright",
        col    = c("blue", "red"),
        pch    = c(16, 17),
        lty    = c(1, 2))
+abline(h = 15, lty = 3, col = "darkgreen")
