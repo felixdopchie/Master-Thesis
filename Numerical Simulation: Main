@@ -14,7 +14,7 @@ alpha <- 0.5     # Matching function elasticity
 y     <- 25      # Productivity
 psi   <- 0.5     # Vacancy posting cost
 d     <- 1       # Application cost
-c     <- 5       # Disutility parameter for immigrants
+c     <- 4       # Disutility parameter for immigrants
 mu    <- 0.25    # Matching efficiency
 xi    <- 0.9     # Share of Disutility firms 
 
