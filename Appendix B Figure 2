@@ -17,7 +17,7 @@ alpha <- 0.5     # Matching-function elasticity
 y     <- 25      # Productivity
 psi   <- 0.5     # Vacancy posting cost
 d     <- 1       # Application cost
-c     <- 5       # Immigrant disutility parameter (fixed)
+c     <- 4       # Immigrant disutility parameter (fixed)
 mu    <- 0.25    # Matching efficiency
 
 # -----------------------------
